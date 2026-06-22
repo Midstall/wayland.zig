@@ -1,3 +1,8 @@
 .zig-cache/
+zig-pkg/
 zig-out/
 *.o
+
+.direnv
+result
+result-*

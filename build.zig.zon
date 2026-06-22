@@ -1,0 +1,17 @@
+.{
+    .name = .wayland,
+    .version = "0.1.0",
+    .minimum_zig_version = "0.16.0",
+    .fingerprint = 0x0a8d655ecf8a9227,
+    .dependencies = .{
+        .xml = .{
+            .url = "git+https://github.com/ianprime0509/zig-xml.git#b97f2ab4868ae3cac9902b33a40d3f31d2df739d",
+            .hash = "xml-0.2.0-ZTbP3yI6AgB9Rpd2hQrueO63ib0Bm6mQiL_WB1t7JAmP",
+        },
+        .wayland = .{
+            .url = "https://gitlab.freedesktop.org/wayland/wayland/-/archive/1.23.0/wayland-1.23.0.tar.gz",
+            .hash = "N-V-__8AAHioGABnssAnKMhn9JEkNUXymmrtMYo-qsWg_lYt",
+        },
+    },
+    .paths = .{ "build.zig.zon", "build.zig", "src", "generator", "test", "example", "tools", "protocol" },
+}
