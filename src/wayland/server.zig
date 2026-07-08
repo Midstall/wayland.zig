@@ -73,7 +73,7 @@ const ClientDestroyObserver = struct {
 /// Connect a raw AF_UNIX SOCK_STREAM client to `socket_path`. Returns the fd.
 fn rawConnect(socket_path: []const u8) !i32 {
     const rc = linux.socket(linux.AF.UNIX, linux.SOCK.STREAM | linux.SOCK.CLOEXEC, 0);
-    if (posix.errno(rc) != .SUCCESS) return error.SocketFailed;
+    if (std.os.linux.errno(rc) != .SUCCESS) return error.SocketFailed;
     const fd: i32 = @intCast(rc);
     errdefer _ = linux.close(fd);
 
@@ -82,7 +82,7 @@ fn rawConnect(socket_path: []const u8) !i32 {
     @memcpy(addr.path[0..socket_path.len], socket_path);
     const addrlen: linux.socklen_t = @intCast(@sizeOf(linux.sa_family_t) + socket_path.len + 1);
     const crc = linux.connect(fd, @ptrCast(&addr), addrlen);
-    if (posix.errno(crc) != .SUCCESS) return error.ConnectFailed;
+    if (std.os.linux.errno(crc) != .SUCCESS) return error.ConnectFailed;
     return fd;
 }
 
@@ -94,7 +94,7 @@ fn sendGetRegistry(fd: i32, new_id: u32) !void {
     std.mem.writeInt(u32, msg[4..8], (@as(u32, 12) << 16) | 1, .little); // size 12, opcode 1
     std.mem.writeInt(u32, msg[8..12], new_id, .little); // new_id arg
     const rc = linux.write(fd, &msg, msg.len);
-    if (posix.errno(rc) != .SUCCESS) return error.WriteFailed;
+    if (std.os.linux.errno(rc) != .SUCCESS) return error.WriteFailed;
 }
 
 test "server: client connect, get_registry route, clean disconnect" {
@@ -213,7 +213,7 @@ fn sendRaw(fd: i32, object_id: u32, opcode: u16, body: []const u8) !void {
     @memcpy(buf[0..8], &hdr);
     @memcpy(buf[8 .. 8 + body.len], body);
     const rc = linux.write(fd, &buf, 8 + body.len);
-    if (posix.errno(rc) != .SUCCESS) return error.WriteFailed;
+    if (std.os.linux.errno(rc) != .SUCCESS) return error.WriteFailed;
 }
 
 /// Read one complete wire message off the raw client fd into `out`, driving the
@@ -225,7 +225,7 @@ fn readEvent(d: *Display, fd: i32, out: []u8) !usize {
         d.flushClients();
         // Try to read a header.
         const rc = linux.read(fd, out.ptr, out.len);
-        const e = posix.errno(rc);
+        const e = std.os.linux.errno(rc);
         if (e == .SUCCESS) {
             const n: usize = @intCast(rc);
             if (n >= 8) return n;
@@ -312,7 +312,7 @@ test "server: get_registry advertises a global, bind + sync + error roundtrip" {
         try w.writeNewId(testing.allocator, 3);
         const buf = w.finish();
         const rc = linux.write(cfd, buf.ptr, buf.len);
-        if (posix.errno(rc) != .SUCCESS) return error.WriteFailed;
+        if (std.os.linux.errno(rc) != .SUCCESS) return error.WriteFailed;
     }
     iters = 0;
     while (!recorder.bound and iters < 50) : (iters += 1) try d.loop.dispatch(20);

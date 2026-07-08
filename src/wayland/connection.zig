@@ -10,7 +10,7 @@
 //! argument words. `read` pulls bytes via recvmsg (queuing any incoming fds),
 //! `flush` pushes buffered out-bytes via sendmsg (attaching queued out-fds).
 //!
-//! Raw Linux syscalls via std.os.linux, errno via std.posix.errno. Zig 0.16
+//! Raw Linux syscalls via std.os.linux, errno via std.os.linux.errno. Zig 0.16
 //! (std.os.linux.close, not std.posix.close).
 
 const std = @import("std");
@@ -170,7 +170,7 @@ pub const Connection = struct {
         const MSG_CMSG_CLOEXEC: u32 = 0x40000000;
         const MSG_DONTWAIT: u32 = 0x40;
         const rc = linux.recvmsg(self.fd, &msg, MSG_CMSG_CLOEXEC | MSG_DONTWAIT);
-        const e = posix.errno(rc);
+        const e = std.os.linux.errno(rc);
         if (e != .SUCCESS) {
             if (e == .AGAIN or e == .INTR) return 0;
             return error.RecvFailed;
@@ -305,7 +305,7 @@ pub const Connection = struct {
             const MSG_DONTWAIT: u32 = 0x40;
             const MSG_NOSIGNAL: u32 = 0x4000;
             const rc = linux.sendmsg(self.fd, &msg, MSG_DONTWAIT | MSG_NOSIGNAL);
-            const e = posix.errno(rc);
+            const e = std.os.linux.errno(rc);
             if (e != .SUCCESS) {
                 if (e == .AGAIN or e == .INTR) return; // try again on next WRITABLE
                 if (e == .PIPE or e == .CONNRESET) return error.BrokenPipe;
@@ -335,7 +335,7 @@ const testing = std.testing;
 fn socketpair() ![2]i32 {
     var fds: [2]i32 = undefined;
     const rc = linux.socketpair(linux.AF.UNIX, linux.SOCK.STREAM | linux.SOCK.CLOEXEC | linux.SOCK.NONBLOCK, 0, &fds);
-    if (posix.errno(rc) != .SUCCESS) return error.SocketPairFailed;
+    if (std.os.linux.errno(rc) != .SUCCESS) return error.SocketPairFailed;
     return fds;
 }
 

@@ -18,7 +18,7 @@
 //! exposed so a compositor can sample a committed buffer and send wl_buffer
 //! .release back.
 //!
-//! Raw Linux syscalls via std.os.linux, errno via std.posix.errno. Zig 0.16
+//! Raw Linux syscalls via std.os.linux, errno via std.os.linux.errno. Zig 0.16
 //! (std.os.linux mmap/munmap/mremap/close).
 
 const std = @import("std");
@@ -33,7 +33,7 @@ const Global = @import("global.zig").Global;
 /// ftruncate syscall wrapper (std.posix.ftruncate was removed in 0.16).
 fn ftruncate(fd: posix.fd_t, length: i64) !void {
     const rc = linux.ftruncate(fd, length);
-    if (posix.errno(rc) != .SUCCESS) return error.TruncateFailed;
+    if (std.os.linux.errno(rc) != .SUCCESS) return error.TruncateFailed;
 }
 
 /// A client-side, mmap'd SHM pool backed by a memfd. Used by a Wayland client
@@ -102,7 +102,7 @@ pub fn sendFd(sock_fd: posix.fd_t, wire_buf: []const u8, fd: posix.fd_t) !void {
     };
 
     const rc = system.sendmsg(sock_fd, &msg, 0);
-    if (std.posix.errno(rc) != .SUCCESS) return error.SendFailed;
+    if (std.os.linux.errno(rc) != .SUCCESS) return error.SendFailed;
 }
 
 /// The two formats every shm renderer must support (wl_shm.format values).
@@ -132,7 +132,7 @@ fn mmapRead(fd: posix.fd_t, size: usize) ![]align(std.heap.page_size_min) u8 {
         fd,
         0,
     );
-    const e = posix.errno(rc);
+    const e = std.os.linux.errno(rc);
     if (e != .SUCCESS) return error.MmapFailed;
     const ptr: [*]align(std.heap.page_size_min) u8 = @ptrFromInt(rc);
     return ptr[0..size];
@@ -195,7 +195,7 @@ pub const Pool = struct {
         }
         // MREMAP_MAYMOVE = 1.
         const rc = linux.mremap(self.data.ptr, self.size, new_size, .{ .MAYMOVE = true }, null);
-        const e = posix.errno(rc);
+        const e = std.os.linux.errno(rc);
         if (e != .SUCCESS) return error.MremapFailed;
         const ptr: [*]align(std.heap.page_size_min) u8 = @ptrFromInt(rc);
         self.data = ptr[0..new_size];
@@ -462,7 +462,7 @@ const testing = std.testing;
 fn memfd(size: usize) !posix.fd_t {
     const fd = try posix.memfd_create("wayland-shm-test", 0);
     const rc = linux.ftruncate(fd, @intCast(size));
-    if (posix.errno(rc) != .SUCCESS) {
+    if (std.os.linux.errno(rc) != .SUCCESS) {
         closeFd(fd);
         return error.TruncateFailed;
     }

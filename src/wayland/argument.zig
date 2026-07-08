@@ -157,7 +157,7 @@ const posix = std.posix;
 fn socketpair() ![2]i32 {
     var fds: [2]i32 = undefined;
     const rc = linux.socketpair(linux.AF.UNIX, linux.SOCK.STREAM | linux.SOCK.CLOEXEC | linux.SOCK.NONBLOCK, 0, &fds);
-    if (posix.errno(rc) != .SUCCESS) return error.SocketPairFailed;
+    if (std.os.linux.errno(rc) != .SUCCESS) return error.SocketPairFailed;
     return fds;
 }
 

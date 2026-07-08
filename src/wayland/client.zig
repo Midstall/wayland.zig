@@ -127,7 +127,7 @@ pub const Connection = struct {
             // std.posix.write was removed in 0.16; use the raw syscall layer
             // (same layer shm.zig uses for sendmsg) with errno handling.
             const rc = std.posix.system.write(fd, buf.ptr + off, buf.len - off);
-            switch (std.posix.errno(rc)) {
+            switch (std.os.linux.errno(rc)) {
                 .SUCCESS => off += @intCast(rc),
                 .INTR => {},
                 else => return error.WriteFailed,
@@ -164,7 +164,7 @@ pub const Connection = struct {
                 .flags = 0,
             };
             const rc = system.recvmsg(fd, &msg, 0);
-            switch (std.posix.errno(rc)) {
+            switch (std.os.linux.errno(rc)) {
                 .SUCCESS => {},
                 .INTR => continue,
                 else => return error.ReadFailed,

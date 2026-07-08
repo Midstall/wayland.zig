@@ -575,7 +575,7 @@ test "Client object map: id ranges and lookups" {
     // Fabricate a client without a real socket using a socketpair end.
     var fds: [2]i32 = undefined;
     const rc = linux.socketpair(linux.AF.UNIX, linux.SOCK.STREAM | linux.SOCK.CLOEXEC, 0, &fds);
-    try testing.expect(posix.errno(rc) == .SUCCESS);
+    try testing.expect(std.os.linux.errno(rc) == .SUCCESS);
     // The other end stays open for the duration so the client is not torn down.
     defer _ = linux.close(fds[1]);
 

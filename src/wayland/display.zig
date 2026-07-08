@@ -6,7 +6,7 @@
 //! AF_UNIX socket(s). Each listening socket is added to the event loop as a
 //! READABLE fd source whose callback accepts a connection and creates a Client.
 //!
-//! Raw Linux syscalls via std.os.linux, errno via std.posix.errno. Zig 0.16.
+//! Raw Linux syscalls via std.os.linux, errno via std.os.linux.errno. Zig 0.16.
 
 const std = @import("std");
 const linux = std.os.linux;
@@ -328,7 +328,7 @@ pub const Display = struct {
             // SOCK_CLOEXEC | SOCK_NONBLOCK on the accepted fd via accept4.
             const flags: u32 = linux.SOCK.CLOEXEC | linux.SOCK.NONBLOCK;
             const rc = linux.accept4(fd, null, null, flags);
-            const e = posix.errno(rc);
+            const e = std.os.linux.errno(rc);
             if (e != .SUCCESS) {
                 // EAGAIN: drained. Anything else: stop for now.
                 break;
@@ -369,7 +369,7 @@ fn openLock(path_z: [:0]const u8) !i32 {
     // O_CREAT | O_CLOEXEC | O_RDWR, mode 0660. linux.O is a packed struct here.
     const O = linux.O{ .ACCMODE = .RDWR, .CREAT = true, .CLOEXEC = true };
     const rc = linux.open(path_z.ptr, O, 0o660);
-    if (posix.errno(rc) != .SUCCESS) return error.LockFailed;
+    if (std.os.linux.errno(rc) != .SUCCESS) return error.LockFailed;
     return @intCast(rc);
 }
 
@@ -379,7 +379,7 @@ fn makeListenSocket(path: []const u8) DisplayError!i32 {
         linux.SOCK.STREAM | linux.SOCK.CLOEXEC | linux.SOCK.NONBLOCK,
         0,
     );
-    if (posix.errno(rc) != .SUCCESS) return error.SocketCreateFailed;
+    if (std.os.linux.errno(rc) != .SUCCESS) return error.SocketCreateFailed;
     const fd: i32 = @intCast(rc);
     errdefer _ = linux.close(fd);
 
@@ -390,10 +390,10 @@ fn makeListenSocket(path: []const u8) DisplayError!i32 {
     // sun_family + the path bytes + the NUL.
     const addrlen: linux.socklen_t = @intCast(@sizeOf(linux.sa_family_t) + path.len + 1);
     const brc = linux.bind(fd, @ptrCast(&addr), addrlen);
-    if (posix.errno(brc) != .SUCCESS) return error.SocketBindFailed;
+    if (std.os.linux.errno(brc) != .SUCCESS) return error.SocketBindFailed;
 
     const lrc = linux.listen(fd, 128);
-    if (posix.errno(lrc) != .SUCCESS) return error.SocketListenFailed;
+    if (std.os.linux.errno(lrc) != .SUCCESS) return error.SocketListenFailed;
 
     return fd;
 }
@@ -429,5 +429,5 @@ test "Display: addSocketAuto binds in a temp runtime dir" {
     // The socket file exists at <dir>/<name> (F_OK = mode 0).
     var full_buf: [300]u8 = undefined;
     const full = try std.fmt.bufPrintZ(&full_buf, "{s}/{s}", .{ dir, name });
-    try testing.expect(posix.errno(linux.access(full.ptr, 0)) == .SUCCESS);
+    try testing.expect(std.os.linux.errno(linux.access(full.ptr, 0)) == .SUCCESS);
 }

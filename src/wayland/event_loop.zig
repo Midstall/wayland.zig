@@ -8,7 +8,7 @@
 //! deferred to a destroy list and freed after the ready sources are processed,
 //! like libwayland).
 //!
-//! Raw Linux syscalls via std.os.linux; errno via std.posix.errno. Zig 0.16.
+//! Raw Linux syscalls via std.os.linux; errno via std.os.linux.errno. Zig 0.16.
 //!
 //! API parity with libwayland:
 //!   EventLoop.create / destroy
@@ -102,7 +102,7 @@ pub const EventLoop = struct {
     /// Create an epoll-backed event loop. Mirrors wl_event_loop_create.
     pub fn create(allocator: std.mem.Allocator) EventLoopError!*EventLoop {
         const rc = linux.epoll_create1(linux.EPOLL.CLOEXEC);
-        if (posix.errno(rc) != .SUCCESS) return error.EpollCreateFailed;
+        if (std.os.linux.errno(rc) != .SUCCESS) return error.EpollCreateFailed;
         const epoll_fd: i32 = @intCast(rc);
 
         const loop = allocator.create(EventLoop) catch {
@@ -155,7 +155,7 @@ pub const EventLoop = struct {
             .data = .{ .ptr = @intFromPtr(source) },
         };
         const rc = linux.epoll_ctl(self.epoll_fd, linux.EPOLL.CTL_ADD, source.fd, &ev);
-        if (posix.errno(rc) != .SUCCESS) return error.EpollCtlFailed;
+        if (std.os.linux.errno(rc) != .SUCCESS) return error.EpollCtlFailed;
     }
 
     /// Add a file-descriptor source. The loop does not take ownership of `fd`
@@ -190,7 +190,7 @@ pub const EventLoop = struct {
             .data = .{ .ptr = @intFromPtr(source) },
         };
         const rc = linux.epoll_ctl(self.epoll_fd, linux.EPOLL.CTL_MOD, source.fd, &ev);
-        if (posix.errno(rc) != .SUCCESS) return error.EpollCtlFailed;
+        if (std.os.linux.errno(rc) != .SUCCESS) return error.EpollCtlFailed;
     }
 
     /// Add a timer source (disarmed). Arm it with `timerUpdate`. Mirrors
@@ -201,7 +201,7 @@ pub const EventLoop = struct {
         data: ?*anyopaque,
     ) EventLoopError!*EventSource {
         const rc = linux.timerfd_create(.MONOTONIC, .{ .CLOEXEC = true });
-        if (posix.errno(rc) != .SUCCESS) return error.TimerfdCreateFailed;
+        if (std.os.linux.errno(rc) != .SUCCESS) return error.TimerfdCreateFailed;
         const fd: i32 = @intCast(rc);
         errdefer _ = linux.close(fd);
 
@@ -231,7 +231,7 @@ pub const EventLoop = struct {
             },
         };
         const rc = linux.timerfd_settime(source.fd, .{}, &its, null);
-        if (posix.errno(rc) != .SUCCESS) return error.TimerfdCreateFailed;
+        if (std.os.linux.errno(rc) != .SUCCESS) return error.TimerfdCreateFailed;
     }
 
     /// Add a signal source. Blocks `signum` in the process signal mask and
@@ -245,7 +245,7 @@ pub const EventLoop = struct {
         var mask = linux.sigemptyset();
         linux.sigaddset(&mask, @enumFromInt(@as(u32, @intCast(signum))));
         const rc = linux.signalfd(-1, &mask, linux.SFD.CLOEXEC);
-        if (posix.errno(rc) != .SUCCESS) return error.SignalfdCreateFailed;
+        if (std.os.linux.errno(rc) != .SUCCESS) return error.SignalfdCreateFailed;
         const fd: i32 = @intCast(rc);
         errdefer _ = linux.close(fd);
         _ = linux.sigprocmask(linux.SIG.BLOCK, &mask, null);
@@ -335,9 +335,9 @@ pub const EventLoop = struct {
 
         var events: [32]linux.epoll_event = undefined;
         const rc = linux.epoll_wait(self.epoll_fd, &events, events.len, timeout_ms);
-        if (posix.errno(rc) != .SUCCESS) {
+        if (std.os.linux.errno(rc) != .SUCCESS) {
             // EINTR is benign: just return as if nothing was ready.
-            if (posix.errno(rc) == .INTR) return;
+            if (std.os.linux.errno(rc) == .INTR) return;
             return error.EpollCtlFailed;
         }
         const count: usize = @intCast(rc);
