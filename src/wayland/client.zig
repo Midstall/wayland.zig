@@ -16,6 +16,7 @@ const core = struct {
 };
 const interface_mod = @import("interface.zig");
 const argument_mod = @import("argument.zig");
+const FdQueue = @import("FdQueue.zig");
 
 pub const Interface = interface_mod.Interface;
 pub const Argument = argument_mod.Argument;
@@ -90,23 +91,19 @@ pub const Connection = struct {
     read_buf: []u8,
     write_buf: []u8,
     // Out-of-band fds received via SCM_RIGHTS (e.g. a wp_drm_lease_device_v1
-    // drm_fd), queued in arrival order; takeFd() pops the oldest.
-    recv_fds: [8]std.posix.fd_t = undefined,
-    recv_fd_count: usize = 0,
+    // drm_fd or a wl_keyboard.keymap fd), queued in arrival order. Shared queue
+    // type so argument.demarshal can pull fds from either connection layer.
+    recv: FdQueue = .{},
 
     /// Pop the oldest received fd, or null if none are queued. The caller owns
-    /// it and must close it.
+    /// it and must close it. Delegates to the shared fd queue.
     pub fn takeFd(self: *Connection) ?std.posix.fd_t {
-        if (self.recv_fd_count == 0) return null;
-        const fd = self.recv_fds[0];
-        self.recv_fd_count -= 1;
-        for (0..self.recv_fd_count) |i| self.recv_fds[i] = self.recv_fds[i + 1];
-        return fd;
+        return self.recv.takeFd();
     }
 
     pub fn deinit(self: *Connection) void {
         self.stream.close(self.io);
-        for (self.recv_fds[0..self.recv_fd_count]) |fd| _ = std.posix.system.close(fd);
+        self.recv.closeAll();
         self.objects.deinit();
         self.wire_writer.deinit(self.allocator);
         self.allocator.free(self.read_buf);
@@ -189,12 +186,7 @@ pub const Connection = struct {
         var i: usize = 0;
         while (i < nfds) : (i += 1) {
             const p: *align(1) const std.posix.fd_t = @ptrCast(base + hdr_size + i * @sizeOf(std.posix.fd_t));
-            if (self.recv_fd_count < self.recv_fds.len) {
-                self.recv_fds[self.recv_fd_count] = p.*;
-                self.recv_fd_count += 1;
-            } else {
-                _ = std.posix.system.close(p.*); // queue full: don't leak
-            }
+            self.recv.push(p.*); // FdQueue closes on overflow rather than leaking
         }
     }
 };
@@ -386,9 +378,9 @@ pub fn dispatchEvent(
     const msg = iface.events[r.opcode];
     const n = interface_mod.argCount(msg.signature);
     if (n > args_out.len) return error.BufferTooSmall;
-    // No event we decode here carries an fd ('h'); pass null for the server
-    // connection that demarshal would otherwise pull fds from.
-    try argument_mod.demarshal(&r, null, msg.signature, args_out[0..n]);
+    // Some events carry an fd ('h'), e.g. wl_keyboard.keymap. Pass the received-fd
+    // queue so demarshal can pop the fd that dispatchOne's recvmsg buffered.
+    try argument_mod.demarshal(&r, &conn.recv, msg.signature, args_out[0..n]);
     return DecodedEvent{
         .object_id = r.object_id,
         .opcode = r.opcode,

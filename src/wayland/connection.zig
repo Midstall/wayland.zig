@@ -16,6 +16,7 @@
 const std = @import("std");
 const linux = std.os.linux;
 const posix = std.posix;
+const FdQueue = @import("FdQueue.zig");
 
 /// Ring/staging buffer sizes. libwayland uses 4096-byte data buffers and a
 /// 2KiB fd buffer; we match the data size and cap the fd queue at 28 (the
@@ -88,9 +89,9 @@ pub const Connection = struct {
     in: ByteBuffer = .{},
     out: ByteBuffer = .{},
     /// Incoming fds received via SCM_RIGHTS, awaiting consumption by a handler.
-    fds_in: [MAX_FDS_OUT]i32 = undefined,
-    fds_in_head: usize = 0,
-    fds_in_tail: usize = 0,
+    /// Shared queue type so argument.demarshal can pull fds from either the client
+    /// or server connection layer through one concrete type.
+    recv: FdQueue = .{},
     /// Outgoing fds to attach to the next flush.
     fds_out: [MAX_FDS_OUT]i32 = undefined,
     fds_out_count: usize = 0,
@@ -105,11 +106,7 @@ pub const Connection = struct {
     /// closed too (they would otherwise leak). Queued outgoing fds are the
     /// caller's responsibility to have flushed.
     pub fn close(self: *Connection) void {
-        while (self.fds_in_head < self.fds_in_tail) : (self.fds_in_head += 1) {
-            _ = linux.close(self.fds_in[self.fds_in_head]);
-        }
-        self.fds_in_head = 0;
-        self.fds_in_tail = 0;
+        self.recv.closeAll();
         if (self.fd >= 0) {
             _ = linux.close(self.fd);
             self.fd = -1;
@@ -127,15 +124,9 @@ pub const Connection = struct {
     }
 
     /// Take the next received fd from the incoming queue, or null if none.
+    /// Delegates to the shared fd queue.
     pub fn takeFd(self: *Connection) ?i32 {
-        if (self.fds_in_head >= self.fds_in_tail) return null;
-        const fd = self.fds_in[self.fds_in_head];
-        self.fds_in_head += 1;
-        if (self.fds_in_head == self.fds_in_tail) {
-            self.fds_in_head = 0;
-            self.fds_in_tail = 0;
-        }
-        return fd;
+        return self.recv.takeFd();
     }
 
     /// Pull whatever is available off the socket into the in-buffer, collecting
@@ -211,14 +202,9 @@ pub const Connection = struct {
     }
 
     fn queueInFd(self: *Connection, fd: i32) void {
-        if (self.fds_in_tail >= MAX_FDS_OUT) {
-            // No room: close it rather than leak (matches the "drop on
-            // overflow" defensive posture; a real client never overflows).
-            _ = linux.close(fd);
-            return;
-        }
-        self.fds_in[self.fds_in_tail] = fd;
-        self.fds_in_tail += 1;
+        // FdQueue closes on overflow rather than leaking (a real client never
+        // overflows one message's fd set).
+        self.recv.push(fd);
     }
 
     /// Copy out a complete message starting at the in-buffer head into `out`,

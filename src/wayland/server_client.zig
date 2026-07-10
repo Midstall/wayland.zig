@@ -525,7 +525,7 @@ fn registryDispatch(object: *Object, opcode: u16, reader: *wire.Reader) c_int {
     if (opcode != 0) return 0;
 
     var args: [4]Argument = undefined;
-    argument.demarshal(reader, &client.conn, "usun", &args) catch return -1;
+    argument.demarshal(reader, &client.conn.recv, "usun", &args) catch return -1;
     const name = args[0].uint;
     const requested_version = args[2].uint;
     const new_id = args[3].new_id;

@@ -754,7 +754,7 @@ fn emitDispatch(gpa: std.mem.Allocator, w: *std.Io.Writer, iface: Interface) !vo
             try w.print("                if (impl_.{s}) |f_| f_(resource_.user_data, resource_);\n", .{fname});
         } else {
             try w.print("                var args_: [{d}]wl.Argument = undefined;\n", .{nargs});
-            try w.print("                wl.argument.demarshal(reader_, &resource_.client.conn, interface.requests[{d}].signature, &args_) catch return -1;\n", .{op});
+            try w.print("                wl.argument.demarshal(reader_, &resource_.client.conn.recv, interface.requests[{d}].signature, &args_) catch return -1;\n", .{op});
             try w.print("                if (impl_.{s}) |f_| f_(resource_.user_data, resource_", .{fname});
             for (req.args.items, 0..) |arg, ai| {
                 switch (arg.arg_type) {

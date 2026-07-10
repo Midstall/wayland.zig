@@ -22,6 +22,7 @@ const Fixed = @import("fixed.zig").Fixed;
 const wire = @import("wire.zig");
 const interface = @import("interface.zig");
 const Connection = @import("connection.zig").Connection;
+const FdQueue = @import("FdQueue.zig");
 
 pub const ArgError = error{
     OutOfMemory,
@@ -114,12 +115,13 @@ pub fn marshal(
 }
 
 /// Decode a received request body from `reader` per `signature` into `out`.
-/// `out.len` must equal the signature's arg count. fds are pulled from the
-/// connection's incoming fd queue (`conn` may be null when the signature has
-/// no 'h' chars). Strings/arrays alias the reader's buffer (no copy).
+/// `out.len` must equal the signature's arg count. fds are pulled from `fds`, the
+/// incoming SCM_RIGHTS queue (may be null when the signature has no 'h' chars).
+/// Both connection layers hold a shared `FdQueue`, so either can feed this.
+/// Strings/arrays alias the reader's buffer (no copy).
 pub fn demarshal(
     reader: *wire.Reader,
-    conn: ?*Connection,
+    fds: ?*FdQueue,
     signature: []const u8,
     out: []Argument,
 ) ArgError!void {
@@ -139,8 +141,8 @@ pub fn demarshal(
             'n' => .{ .new_id = try reader.readNewId() },
             'a' => .{ .array = try reader.readArray() },
             'h' => blk: {
-                const c2 = conn orelse return error.MissingFd;
-                const fd = c2.takeFd() orelse return error.MissingFd;
+                const q = fds orelse return error.MissingFd;
+                const fd = q.takeFd() orelse return error.MissingFd;
                 break :blk .{ .fd = fd };
             },
             else => unreachable,
@@ -185,7 +187,7 @@ test "argument: marshal then demarshal a usu (global) message round-trips" {
     try testing.expectEqual(interface.REGISTRY_GLOBAL, r.opcode);
 
     var decoded: [3]Argument = undefined;
-    try demarshal(&r, &b, "usu", &decoded);
+    try demarshal(&r, &b.recv, "usu", &decoded);
     try testing.expectEqual(@as(u32, 7), decoded[0].uint);
     try testing.expectEqualStrings("wl_compositor", decoded[1].string.?);
     try testing.expectEqual(@as(u32, 4), decoded[2].uint);
@@ -214,7 +216,7 @@ test "argument: marshal then demarshal a bind (usun) request" {
     const size = (try b.peekMessage(&buf)).?;
     var r = try wire.Reader.init(buf[0..size]);
     var decoded: [4]Argument = undefined;
-    try demarshal(&r, &b, "usun", &decoded);
+    try demarshal(&r, &b.recv, "usun", &decoded);
     try testing.expectEqual(@as(u32, 1), decoded[0].uint);
     try testing.expectEqualStrings("wl_compositor", decoded[1].string.?);
     try testing.expectEqual(@as(u32, 4), decoded[2].uint);
@@ -243,7 +245,7 @@ test "argument: error (ous) message round-trips with object and message" {
     const size = (try b.peekMessage(&buf)).?;
     var r = try wire.Reader.init(buf[0..size]);
     var decoded: [3]Argument = undefined;
-    try demarshal(&r, &b, "ous", &decoded);
+    try demarshal(&r, &b.recv, "ous", &decoded);
     try testing.expectEqual(@as(u32, 5), decoded[0].object.?);
     try testing.expectEqual(@as(u32, 1), decoded[1].uint);
     try testing.expectEqualStrings("bad object", decoded[2].string.?);
@@ -272,7 +274,7 @@ test "argument: fd travels out-of-band (h not in the data stream)" {
     try testing.expectEqual(@as(usize, 12), size);
     var r = try wire.Reader.init(buf[0..size]);
     var decoded: [2]Argument = undefined;
-    try demarshal(&r, &b, "uh", &decoded);
+    try demarshal(&r, &b.recv, "uh", &decoded);
     try testing.expectEqual(@as(u32, 42), decoded[0].uint);
     try testing.expect(decoded[1].fd >= 0);
     try testing.expect(decoded[1].fd != efd);
