@@ -29,7 +29,7 @@ pub fn generateProtocol(
     protocol_xml: std.Build.LazyPath,
     module_name: []const u8,
 ) *std.Build.Module {
-    const run = owner.addRunArtifact(wayland_dep.artifact("wayland-gen"));
+    const run = owner.addRunArtifact(wayland_dep.artifact("wayland-gen-host"));
     run.addFileArg(protocol_xml);
     const out = run.addOutputFileArg(owner.fmt("{s}.zig", .{module_name}));
     const mod = owner.createModule(.{ .root_source_file = out });
@@ -75,16 +75,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const host_gen_exe = b.addExecutable(.{
-        .name = "wayland-gen",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("generator/main.zig"),
-            .target = b.graph.host,
-            .optimize = optimize,
-        }),
-    });
-    host_gen_exe.root_module.addImport("xml", xml_mod);
-
     const gen_exe = b.addExecutable(.{
         .name = "wayland-gen",
         .root_module = b.createModule(.{
@@ -95,6 +85,17 @@ pub fn build(b: *std.Build) void {
     });
     gen_exe.root_module.addImport("xml", xml_mod);
     b.installArtifact(gen_exe);
+
+    const host_gen_exe = b.addExecutable(.{
+        .name = "wayland-gen-host",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("generator/main.zig"),
+            .target = b.graph.host,
+            .optimize = optimize,
+        }),
+    });
+    host_gen_exe.root_module.addImport("xml", xml_mod);
+    b.installArtifact(host_gen_exe);
 
     const test_step = b.step("test", "Run tests");
 
